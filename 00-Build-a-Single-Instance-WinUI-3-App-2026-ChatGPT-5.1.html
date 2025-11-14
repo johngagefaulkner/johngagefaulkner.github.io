@@ -1,0 +1,1220 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+	<head>
+		<meta charset="utf-8" />
+		<title>
+			Single-Instance WinUI 3 Apps with Protocol Activation (Windows App
+			SDK 1.8)
+		</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<!-- TailwindCSS via CDN for a single-file doc -->
+		<script src="https://cdn.tailwindcss.com"></script>
+		<style>
+			/* Tiny Tailwind tweak to feel a bit more Fluent-ish */
+			html,
+			body {
+				scroll-behavior: smooth;
+			}
+			.glass {
+				background: radial-gradient(
+						circle at top left,
+						rgba(255, 255, 255, 0.12),
+						transparent 55%
+					),
+					radial-gradient(
+						circle at bottom right,
+						rgba(37, 99, 235, 0.18),
+						transparent 60%
+					);
+			}
+			.code-block {
+				font-family: ui-monospace, SFMono-Regular, Menlo, Monaco,
+					Consolas, "Liberation Mono", "Courier New", monospace;
+				font-size: 0.85rem;
+			}
+			.fluent-border {
+				border-radius: 1.25rem;
+				box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.35),
+					0 18px 45px rgba(15, 23, 42, 0.75);
+			}
+		</style>
+		<!-- Syntax highlighting: Highlight.js (GitHub Dark theme) -->
+		<link
+			rel="stylesheet"
+			href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css"
+		/>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+		<!-- Optional: language packs you actually use -->
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/csharp.min.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/xml.min.js"></script>
+
+		<script>
+			document.addEventListener("DOMContentLoaded", () => {
+				// Let highlight.js do its thing
+				document.querySelectorAll("pre code").forEach((block) => {
+					hljs.highlightElement(block);
+				});
+			});
+		</script>
+	</head>
+	<body class="min-h-screen bg-slate-950 text-slate-100 antialiased">
+		<div
+			class="glass pointer-events-none fixed inset-0 opacity-70 -z-10"
+		></div>
+
+		<div class="max-w-6xl mx-auto px-4 py-8 lg:py-12">
+			<!-- Header / Hero -->
+			<header class="mb-10 lg:mb-14">
+				<div
+					class="inline-flex items-center gap-2 rounded-full border border-slate-700/80 bg-slate-900/70 px-3 py-1 text-xs font-medium text-slate-300"
+				>
+					<span
+						class="inline-block h-2 w-2 rounded-full bg-emerald-400"
+					></span>
+					Windows App SDK 1.8 · WinUI 3 · C#
+				</div>
+
+				<div
+					class="mt-5 grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)] lg:items-center"
+				>
+					<div>
+						<h1
+							class="text-3xl sm:text-4xl lg:text-5xl font-semibold tracking-tight text-slate-50"
+						>
+							Single-Instance WinUI&nbsp;3 Apps<br
+								class="hidden sm:block"
+							/>
+							with Protocol Activation &amp; Redirection
+						</h1>
+						<p
+							class="mt-4 text-base sm:text-lg text-slate-300 max-w-2xl"
+						>
+							A step-by-step, modernized guide (2025) to building
+							a single-instanced WinUI&nbsp;3 desktop app using
+							Windows App SDK 1.8: from template setup to instance
+							redirection, custom URI schemes, and safely
+							forwarding activation arguments into the running
+							instance.
+						</p>
+
+						<div
+							class="mt-6 flex flex-wrap gap-3 text-xs sm:text-sm"
+						>
+							<span
+								class="rounded-full bg-sky-500/15 px-3 py-1 text-sky-300 border border-sky-500/40"
+							>
+								Based on current Windows App SDK app lifecycle
+								docs
+							</span>
+							<span
+								class="rounded-full bg-emerald-500/10 px-3 py-1 text-emerald-300 border border-emerald-500/40"
+							>
+								Packaged WinUI 3 desktop app
+							</span>
+							<span
+								class="rounded-full bg-purple-500/10 px-3 py-1 text-purple-300 border border-purple-500/40"
+							>
+								Single instance + protocol URI routing
+							</span>
+						</div>
+					</div>
+
+					<aside
+						class="rounded-3xl fluent-border bg-slate-900/80 p-5 lg:p-6 space-y-4"
+					>
+						<h2
+							class="text-sm font-semibold tracking-wide text-slate-200 uppercase"
+						>
+							Quick Navigation
+						</h2>
+						<nav class="space-y-2 text-sm">
+							<a
+								href="#prereqs"
+								class="block rounded-xl bg-slate-800/80 px-3 py-2 hover:bg-slate-700/80 transition"
+							>
+								1. Prerequisites &amp; project setup
+							</a>
+							<a
+								href="#single-instance"
+								class="block rounded-xl bg-slate-800/60 px-3 py-2 hover:bg-slate-700/80 transition"
+							>
+								2. Single-instance wiring (Program.cs)
+							</a>
+							<a
+								href="#activation-pipeline"
+								class="block rounded-xl bg-slate-800/60 px-3 py-2 hover:bg-slate-700/80 transition"
+							>
+								3. Shared activation pipeline
+							</a>
+							<a
+								href="#protocol-registration"
+								class="block rounded-xl bg-slate-800/60 px-3 py-2 hover:bg-slate-700/80 transition"
+							>
+								4. Registering a custom URI protocol
+							</a>
+							<a
+								href="#forwarding-protocol"
+								class="block rounded-xl bg-slate-800/60 px-3 py-2 hover:bg-slate-700/80 transition"
+							>
+								5. Redirecting protocol activations to the
+								running instance
+							</a>
+							<a
+								href="#dispatcherqueue"
+								class="block rounded-xl bg-slate-800/60 px-3 py-2 hover:bg-slate-700/80 transition"
+							>
+								6. Using DispatcherQueue safely
+							</a>
+							<a
+								href="#background-tasks"
+								class="block rounded-xl bg-slate-800/60 px-3 py-2 hover:bg-slate-700/80 transition"
+							>
+								7. Background tasks &amp; advanced scenarios
+							</a>
+							<a
+								href="#full-flow-checklist"
+								class="block rounded-xl bg-slate-800/60 px-3 py-2 hover:bg-slate-700/80 transition"
+							>
+								8. End-to-end checklist
+							</a>
+						</nav>
+					</aside>
+				</div>
+			</header>
+
+			<!-- Section 1: Prereqs -->
+			<section id="prereqs" class="mb-12 lg:mb-16 space-y-5">
+				<h2
+					class="text-2xl font-semibold text-slate-50 flex items-center gap-2"
+				>
+					<span
+						class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-sky-500/90 text-xs font-bold text-slate-950"
+						>1</span
+					>
+					Prerequisites &amp; project setup
+				</h2>
+
+				<p class="text-sm sm:text-base text-slate-300">
+					This guide assumes a packaged WinUI&nbsp;3 desktop app built
+					on the
+					<strong>Windows App SDK 1.8</strong> “Blank App, Packaged
+					(WinUI 3 in Desktop)” template in Visual Studio (C#), as
+					described in the official “Create your first WinUI 3 app”
+					article and the DrumPad tutorial series.
+					:contentReference[oaicite:1]{index=1}
+				</p>
+
+				<div class="grid gap-4 lg:grid-cols-2">
+					<div
+						class="rounded-3xl bg-slate-900/80 border border-slate-800/80 p-5 space-y-3"
+					>
+						<h3
+							class="text-sm font-semibold text-slate-200 uppercase"
+						>
+							Tools
+						</h3>
+						<ul
+							class="list-disc list-inside text-sm text-slate-300 space-y-1"
+						>
+							<li>Windows 11 for development and testing.</li>
+							<li>
+								Visual Studio 2022 or later with
+								<em>Desktop development with C#/.NET</em>
+								workload.
+							</li>
+							<li>
+								Windows App SDK 1.8 (Stable channel) with
+								WinUI&nbsp;3 templates.
+								:contentReference[oaicite:2]{index=2}
+							</li>
+						</ul>
+					</div>
+					<div
+						class="rounded-3xl bg-slate-900/80 border border-slate-800/80 p-5 space-y-3"
+					>
+						<h3
+							class="text-sm font-semibold text-slate-200 uppercase"
+						>
+							High-level flow
+						</h3>
+						<ol
+							class="list-decimal list-inside text-sm text-slate-300 space-y-1"
+						>
+							<li>
+								Create the template WinUI&nbsp;3 packaged app.
+							</li>
+							<li>Disable the auto-generated Main method.</li>
+							<li>
+								Implement a custom
+								<code class="code-block">Program.Main</code>
+								using
+								<code class="code-block">AppInstance</code>.
+							</li>
+							<li>
+								Centralize all activation handling (launch +
+								protocol) in one method.
+							</li>
+							<li>
+								Register a custom URI scheme (protocol) in the
+								manifest.
+							</li>
+							<li>
+								Test: launching normally, via URI, and while
+								already running.
+							</li>
+						</ol>
+					</div>
+				</div>
+			</section>
+
+			<!-- Section 2: Single instance wiring -->
+			<section id="single-instance" class="mb-12 lg:mb-16 space-y-5">
+				<h2
+					class="text-2xl font-semibold text-slate-50 flex items-center gap-2"
+				>
+					<span
+						class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-sky-500/90 text-xs font-bold text-slate-950"
+						>2</span
+					>
+					Wire up single-instance behavior in Program.cs
+				</h2>
+
+				<p class="text-sm sm:text-base text-slate-300">
+					WinUI&nbsp;3 apps are multi-instanced by default. The
+					Windows App SDK app lifecycle APIs expose
+					<code class="code-block">AppInstance</code>, which lets you
+					control instancing, redirect activations, and inspect
+					activation arguments. :contentReference[oaicite:3]{index=3}
+				</p>
+
+				<!-- 2.1 Disable generated Main -->
+				<div
+					class="rounded-3xl bg-slate-900/80 border border-slate-800/80 p-5 sm:p-6 space-y-4"
+				>
+					<h3 class="text-lg font-semibold text-slate-100">
+						2.1 Disable the auto-generated Main
+					</h3>
+					<p class="text-sm text-slate-300">
+						The template generates a default
+						<code class="code-block">Main</code> behind the scenes.
+						To intercept activations as early as possible (before
+						any window exists), you define
+						<code class="code-block"
+							>DISABLE_XAML_GENERATED_MAIN</code
+						>
+						in your project file. The official single-instance
+						how-to uses this exact approach.
+						:contentReference[oaicite:4]{index=4}
+					</p>
+
+					<div
+						class="code-block rounded-2xl bg-slate-950/70 border border-slate-800 px-4 py-3 overflow-x-auto"
+					>
+						<pre><code class="language-xml">&lt;Project Sdk="Microsoft.NET.Sdk"&gt;
+  &lt;PropertyGroup&gt;
+    &lt;OutputType&gt;WinExe&lt;/OutputType&gt;
+    &lt;TargetFramework&gt;netX.X-windows10.0.19041.0&lt;/TargetFramework&gt;
+    &lt;UseWinUI&gt;true&lt;/UseWinUI&gt;
+
+    &lt;!-- Turn off the generated Main so we can define our own --&gt;
+    &lt;DefineConstants&gt;
+      $(DefineConstants);DISABLE_XAML_GENERATED_MAIN
+    &lt;/DefineConstants&gt;
+  &lt;/PropertyGroup&gt;
+&lt;/Project&gt;</code></pre>
+					</div>
+
+					<p class="text-xs text-slate-400">
+						Replace <code>netX.X</code> with your target (.NET
+						8–10); the single-instance pattern remains the same.
+					</p>
+				</div>
+
+				<!-- 2.2 Program.cs -->
+				<div
+					class="rounded-3xl bg-slate-900/80 border border-slate-800/80 p-5 sm:p-6 space-y-4"
+				>
+					<h3 class="text-lg font-semibold text-slate-100">
+						2.2 Implement Program.Main with AppInstance
+					</h3>
+
+					<p class="text-sm text-slate-300">
+						The official pattern is: initialize COM wrappers, decide
+						whether to redirect this activation to an existing
+						instance, and only start the WinUI application if you
+						are the primary instance. A
+						<code class="code-block"
+							>DispatcherQueueSynchronizationContext</code
+						>
+						is set up so async continuations can safely run on the
+						UI thread. :contentReference[oaicite:5]{index=5}
+					</p>
+
+					<div
+						class="code-block rounded-2xl bg-slate-950/70 border border-slate-800 px-4 py-4 overflow-x-auto"
+					>
+						<pre><code class="language-csharp">using System;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.UI.Dispatching;
+using Microsoft.UI.Xaml;
+using Microsoft.Windows.AppLifecycle;
+using Windows.ApplicationModel.Activation;
+
+public class Program
+{
+    [STAThread]
+    public static int Main(string[] args)
+    {
+        // Required for WinRT interop in desktop apps
+        WinRT.ComWrappersSupport.InitializeComWrappers();
+
+        bool isRedirect = DecideRedirection();
+
+        if (!isRedirect)
+        {
+            Application.Start(_ =>
+            {
+                // Wire WinUI to the DispatcherQueue so async/await works as expected on the UI thread.
+                var context = new DispatcherQueueSynchronizationContext(
+                    DispatcherQueue.GetForCurrentThread());
+                SynchronizationContext.SetSynchronizationContext(context);
+
+                _ = new App();
+            });
+        }
+
+        return 0;
+    }
+
+    private static bool DecideRedirection()
+    {
+        bool isRedirect = false;
+
+        // Activation info for this process (Launch, Protocol, File, etc.)
+        AppActivationArguments activationArgs =
+            AppInstance.GetCurrent().GetActivatedEventArgs();
+
+        // Your app's unique instancing key
+        AppInstance keyInstance =
+            AppInstance.FindOrRegisterForKey("SingleInstance.WinUI3.Sample");
+
+        if (keyInstance.IsCurrent)
+        {
+            // Primary instance: listen for redirected activations.
+            keyInstance.Activated += OnActivated;
+        }
+        else
+        {
+            // Another instance is already running: redirect this activation to it.
+            isRedirect = true;
+            RedirectActivationTo(activationArgs, keyInstance);
+        }
+
+        return isRedirect;
+    }
+
+    // --- P/Invoke helpers to wait for redirection and bring the main window to front ---
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    private static extern IntPtr CreateEvent(
+        IntPtr lpEventAttributes, bool bManualReset,
+        bool bInitialState, string lpName);
+
+    [DllImport("kernel32.dll")]
+    private static extern bool SetEvent(IntPtr hEvent);
+
+    [DllImport("ole32.dll")]
+    private static extern uint CoWaitForMultipleObjects(
+        uint dwFlags, uint dwMilliseconds, ulong nHandles,
+        IntPtr[] pHandles, out uint dwIndex);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    private static IntPtr redirectEventHandle = IntPtr.Zero;
+
+    public static void RedirectActivationTo(
+        AppActivationArguments args,
+        AppInstance keyInstance)
+    {
+        redirectEventHandle = CreateEvent(IntPtr.Zero, true, false, null);
+
+        // Perform redirection on a worker thread.
+        Task.Run(() =>
+        {
+            keyInstance.RedirectActivationToAsync(args).AsTask().Wait();
+            SetEvent(redirectEventHandle);
+        });
+
+        const uint CWMO_DEFAULT = 0;
+        const uint INFINITE = 0xFFFFFFFF;
+
+        _ = CoWaitForMultipleObjects(
+            CWMO_DEFAULT,
+            INFINITE,
+            1,
+            new[] { redirectEventHandle },
+            out uint _);
+
+        // After redirection completes, bring the primary window to the front.
+        Process process = Process.GetProcessById((int)keyInstance.ProcessId);
+        SetForegroundWindow(process.MainWindowHandle);
+    }
+
+    // Entry point for redirected activations on the primary instance
+    private static void OnActivated(object sender, AppActivationArguments args)
+    {
+        // Delegate to App so activation handling is centralized.
+        if (Application.Current is App app)
+        {
+            app.HandleActivation(args);
+        }
+    }
+}</code></pre>
+					</div>
+
+					<p class="text-xs text-slate-400">
+						The structure above follows the official single-instance
+						how-to, extended to call into a shared
+						<code class="code-block">App.HandleActivation</code>
+						method that we’ll define next.
+						:contentReference[oaicite:6]{index=6}
+					</p>
+				</div>
+			</section>
+
+			<!-- Section 3: Central activation pipeline -->
+			<section id="activation-pipeline" class="mb-12 lg:mb-16 space-y-5">
+				<h2
+					class="text-2xl font-semibold text-slate-50 flex items-center gap-2"
+				>
+					<span
+						class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-sky-500/90 text-xs font-bold text-slate-950"
+						>3</span
+					>
+					Centralize all activation logic in App
+				</h2>
+
+				<p class="text-sm sm:text-base text-slate-300">
+					The Windows App SDK exposes a single
+					<code class="code-block">AppActivationArguments</code>
+					object that tells you: <em>how</em> your app was activated
+					(launch, file, protocol, startup, …) and any extra payload.
+					You can inspect <code class="code-block">Kind</code> and
+					<code class="code-block">Data</code> to parse activation
+					arguments in one place.
+					:contentReference[oaicite:7]{index=7}
+				</p>
+
+				<div
+					class="rounded-3xl bg-slate-900/80 border border-slate-800/80 p-5 sm:p-6 space-y-4"
+				>
+					<h3 class="text-lg font-semibold text-slate-100">
+						3.1 App.xaml.cs: store the main window &amp; handle
+						activations
+					</h3>
+
+					<p class="text-sm text-slate-300">The idea is:</p>
+					<ul
+						class="list-disc list-inside text-sm text-slate-300 space-y-1"
+					>
+						<li>
+							Create and store a reference to your
+							<code class="code-block">MainWindow</code> on first
+							launch.
+						</li>
+						<li>
+							Call
+							<code class="code-block">HandleActivation</code>:
+							<ul class="list-disc list-inside ml-5">
+								<li>
+									from
+									<code class="code-block">OnLaunched</code>
+									for the initial activation, and
+								</li>
+								<li>
+									from
+									<code class="code-block"
+										>Program.OnActivated</code
+									>
+									when redirections arrive.
+								</li>
+							</ul>
+						</li>
+						<li>
+							Switch on
+							<code class="code-block"
+								>ExtendedActivationKind</code
+							>
+							(Launch, Protocol, etc.).
+						</li>
+					</ul>
+
+					<div
+						class="code-block rounded-2xl bg-slate-950/70 border border-slate-800 px-4 py-4 overflow-x-auto"
+					>
+						<pre><code class="language-csharp">using Microsoft.UI.Xaml;
+using Microsoft.Windows.AppLifecycle;
+using System.Diagnostics;
+using Windows.ApplicationModel.Activation;
+using Windows.Foundation;
+
+namespace SingleInstance.WinUI3.Sample;
+
+public partial class App : Application
+{
+    public static Window? MainWindow { get; private set; }
+
+    public App()
+    {
+        InitializeComponent();
+    }
+
+    protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
+    {
+        // Create and show the main window once.
+        if (MainWindow is null)
+        {
+            MainWindow = new MainWindow();
+            MainWindow.Activate();
+        }
+
+        // Handle the activation that launched this process.
+        var activationArgs = AppInstance.GetCurrent().GetActivatedEventArgs();
+        HandleActivation(activationArgs);
+    }
+
+    /// &lt;summary&gt;
+    /// Central activation handler for launch, protocol, etc.
+    /// Called both from OnLaunched and from Program.OnActivated.
+    /// &lt;/summary&gt;
+    public void HandleActivation(AppActivationArguments activationArgs)
+    {
+        var kind = activationArgs.Kind;
+
+        Debug.WriteLine($"[App] Activation kind: {kind}");
+
+        switch (kind)
+        {
+            case ExtendedActivationKind.Launch:
+                HandleLaunchActivation(activationArgs);
+                break;
+
+            case ExtendedActivationKind.Protocol:
+                HandleProtocolActivation(activationArgs);
+                break;
+
+            // You can add ExtendedActivationKind.File, StartupTask, etc. here as needed.
+            default:
+                break;
+        }
+    }
+
+    private void HandleLaunchActivation(AppActivationArguments activationArgs)
+    {
+        if (activationArgs.Data is ILaunchActivatedEventArgs launchArgs)
+        {
+            string arguments = launchArgs.Arguments ?? string.Empty;
+            Debug.WriteLine($"[App] Launch activation args: '{arguments}'");
+
+            // TODO: route arguments into your navigation / view-model as needed.
+        }
+    }
+
+    private void HandleProtocolActivation(AppActivationArguments activationArgs)
+    {
+        if (activationArgs.Data is IProtocolActivatedEventArgs protocolArgs)
+        {
+            Uri uri = protocolArgs.Uri;
+            Debug.WriteLine($"[App] Protocol activation URI: {uri.AbsoluteUri}");
+
+            // Example: parse query string for parameters like ?action=open&amp;id=42
+            // and navigate to the appropriate page in your app.
+        }
+    }
+}</code></pre>
+					</div>
+
+					<p class="text-xs text-slate-400">
+						The
+						<code class="code-block">ExtendedActivationKind</code>
+						value and the strongly-typed
+						<code class="code-block">Data</code> interfaces (such as
+						<code class="code-block"
+							>IProtocolActivatedEventArgs</code
+						>) are part of the rich activation model in Windows App
+						SDK. :contentReference[oaicite:8]{index=8}
+					</p>
+				</div>
+			</section>
+
+			<!-- Section 4: Protocol registration -->
+			<section
+				id="protocol-registration"
+				class="mb-12 lg:mb-16 space-y-5"
+			>
+				<h2
+					class="text-2xl font-semibold text-slate-50 flex items-center gap-2"
+				>
+					<span
+						class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-sky-500/90 text-xs font-bold text-slate-950"
+						>4</span
+					>
+					Register a custom URI protocol for your packaged app
+				</h2>
+
+				<p class="text-sm sm:text-base text-slate-300">
+					To have your app respond to URIs like
+					<code class="code-block">myapp://open?foo=bar</code>, you
+					declare a protocol extension in the app package manifest.
+					The “Handle URI activation” article describes the general
+					pattern, which carries over cleanly to WinUI&nbsp;3 +
+					Windows App SDK. :contentReference[oaicite:9]{index=9}
+				</p>
+
+				<div
+					class="rounded-3xl bg-slate-900/80 border border-slate-800/80 p-5 sm:p-6 space-y-4"
+				>
+					<h3 class="text-lg font-semibold text-slate-100">
+						4.1 Edit Package.appxmanifest (XML view)
+					</h3>
+
+					<ol
+						class="list-decimal list-inside text-sm text-slate-300 space-y-1"
+					>
+						<li>
+							Right-click
+							<strong>Package.appxmanifest</strong> &rarr;
+							<em>Open With…</em> &rarr;
+							<em>XML (Text) Editor</em>.
+						</li>
+						<li>
+							Ensure the
+							<code class="code-block">uap</code> namespace is
+							present on the
+							<code class="code-block">&lt;Package&gt;</code>
+							element.
+						</li>
+						<li>
+							Add a protocol extension inside
+							<code class="code-block"
+								>&lt;Applications&gt; …
+								&lt;Application&gt;</code
+							>.
+						</li>
+					</ol>
+
+					<div
+						class="code-block rounded-2xl bg-slate-950/70 border border-slate-800 px-4 py-4 overflow-x-auto"
+					>
+						<pre><code class="language-xml">&lt;Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  IgnorableNamespaces="uap"&gt;
+
+  &lt;Applications&gt;
+    &lt;Application Id="App"
+                 Executable="$targetnametoken$.exe"
+                 EntryPoint="$targetentrypoint$"&gt;
+
+      &lt;uap:VisualElements
+        DisplayName="SingleInstance WinUI3 Sample"
+        Description="Single-instance app with protocol activation"
+        BackgroundColor="transparent"
+        Square44x44Logo="Assets\Square44x44Logo.png" /&gt;
+
+      &lt;Extensions&gt;
+        &lt;uap:Extension Category="windows.protocol"&gt;
+          &lt;uap:Protocol Name="singleinstance"&gt;
+            &lt;uap:DisplayName&gt;SingleInstance Protocol&lt;/uap:DisplayName&gt;
+            &lt;uap:Logo&gt;Assets\Square44x44Logo.png&lt;/uap:Logo&gt;
+          &lt;/uap:Protocol&gt;
+        &lt;/uap:Extension&gt;
+      &lt;/Extensions&gt;
+
+    &lt;/Application&gt;
+  &lt;/Applications&gt;
+&lt;/Package&gt;</code></pre>
+					</div>
+
+					<p class="text-xs text-slate-400">
+						After deployment, URIs like
+						<code class="code-block"
+							>singleinstance://open?foo=bar</code
+						>
+						will activate your app, and the URI will be available
+						via
+						<code class="code-block"
+							>IProtocolActivatedEventArgs.Uri</code
+						>
+						in your
+						<code class="code-block">HandleProtocolActivation</code>
+						implementation.
+					</p>
+				</div>
+
+				<div
+					class="rounded-3xl bg-slate-900/80 border border-slate-800/80 p-5 sm:p-6 space-y-3"
+				>
+					<h3 class="text-sm font-semibold text-slate-200 uppercase">
+						4.2 Quick sanity test
+					</h3>
+					<ul
+						class="list-disc list-inside text-sm text-slate-300 space-y-1"
+					>
+						<li>
+							Build and <strong>Deploy</strong> your app
+							(right-click project &rarr; Deploy).
+						</li>
+						<li>
+							Press <kbd>Win</kbd>+<kbd>R</kbd>, type
+							<code class="code-block"
+								>singleinstance://test?source=runbox</code
+							>, hit <kbd>Enter</kbd>.
+						</li>
+						<li>
+							Your app should launch (or activate if already
+							running), and the URI should be logged by
+							<code class="code-block"
+								>HandleProtocolActivation</code
+							>.
+						</li>
+					</ul>
+				</div>
+			</section>
+
+			<!-- Section 5: Forwarding protocol activations -->
+			<section id="forwarding-protocol" class="mb-12 lg:mb-16 space-y-5">
+				<h2
+					class="text-2xl font-semibold text-slate-50 flex items-center gap-2"
+				>
+					<span
+						class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-sky-500/90 text-xs font-bold text-slate-950"
+						>5</span
+					>
+					Redirect protocol activations into the running instance
+				</h2>
+
+				<p class="text-sm sm:text-base text-slate-300">
+					At this point, you have:
+				</p>
+				<ul
+					class="list-disc list-inside text-sm text-slate-300 space-y-1"
+				>
+					<li>
+						A custom
+						<code class="code-block">Program.Main</code> that
+						chooses a primary instance using
+						<code class="code-block"
+							>AppInstance.FindOrRegisterForKey</code
+						>.
+					</li>
+					<li>
+						Redirection of subsequent activations via
+						<code class="code-block">RedirectActivationToAsync</code
+						>.
+					</li>
+					<li>
+						A centralized activation handler in
+						<code class="code-block">App.HandleActivation</code>.
+					</li>
+				</ul>
+
+				<p class="text-sm sm:text-base text-slate-300">
+					When a URI activation occurs while the app is already
+					running, the new process:
+				</p>
+
+				<ol
+					class="list-decimal list-inside text-sm text-slate-300 space-y-1"
+				>
+					<li>
+						Receives
+						<code class="code-block">AppActivationArguments</code>
+						containing
+						<code class="code-block"
+							>Kind = ExtendedActivationKind.Protocol</code
+						>
+						and the URI payload.
+						:contentReference[oaicite:10]{index=10}
+					</li>
+					<li>
+						Calls
+						<code class="code-block"
+							>RedirectActivationToAsync</code
+						>
+						targeting the primary instance.
+						:contentReference[oaicite:11]{index=11}
+					</li>
+					<li>Exits after redirection completes.</li>
+					<li>
+						The primary instance’s
+						<code class="code-block">AppInstance.Activated</code>
+						event fires, calling
+						<code class="code-block">Program.OnActivated</code>,
+						which dispatches to
+						<code class="code-block">App.HandleActivation</code>.
+					</li>
+				</ol>
+
+				<div
+					class="rounded-3xl bg-slate-900/80 border border-slate-800/80 p-5 sm:p-6 space-y-4"
+				>
+					<h3 class="text-lg font-semibold text-slate-100">
+						5.1 Logging and processing protocol args
+					</h3>
+
+					<p class="text-sm text-slate-300">
+						The
+						<code class="code-block">HandleProtocolActivation</code>
+						method from earlier already logs the URI. You can expand
+						it to parse parameters and push them into your
+						navigation stack or view-models:
+					</p>
+
+					<div
+						class="code-block rounded-2xl bg-slate-950/70 border border-slate-800 px-4 py-4 overflow-x-auto"
+					>
+						<pre><code class="language-csharp">private void HandleProtocolActivation(AppActivationArguments activationArgs)
+{
+    if (activationArgs.Data is IProtocolActivatedEventArgs protocolArgs)
+    {
+        Uri uri = protocolArgs.Uri;
+        Debug.WriteLine($"[App] Protocol activation URI: {uri}");
+
+        // Simple example: singleinstance://open/item/123?source=deeplink
+        if (uri.Host.Equals("open", StringComparison.OrdinalIgnoreCase))
+        {
+            string path = uri.AbsolutePath.Trim('/');
+            string? query = uri.Query;
+
+            // TODO: parse 'path' and 'query' to figure out what to open.
+            // For example, route to a details page in MainWindow.
+        }
+
+        // You might also enqueue this into a logging pipeline or telemetry.
+    }
+}</code></pre>
+					</div>
+				</div>
+			</section>
+
+			<!-- Section 6: DispatcherQueue -->
+			<section id="dispatcherqueue" class="mb-12 lg:mb-16 space-y-5">
+				<h2
+					class="text-2xl font-semibold text-slate-50 flex items-center gap-2"
+				>
+					<span
+						class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-sky-500/90 text-xs font-bold text-slate-950"
+						>6</span
+					>
+					Safely touching UI from redirected activations
+					(DispatcherQueue)
+				</h2>
+
+				<p class="text-sm sm:text-base text-slate-300">
+					The activation callback attached to
+					<code class="code-block">AppInstance.Activated</code> is not
+					guaranteed to run on the UI thread. The official
+					single-instance sample uses
+					<code class="code-block"
+						>DispatcherQueueSynchronizationContext</code
+					>
+					so async continuations can hop back to the UI thread, but
+					you still shouldn’t directly manipulate UI from the static
+					<code class="code-block">Program.OnActivated</code> handler.
+					:contentReference[oaicite:12]{index=12}
+				</p>
+
+				<div
+					class="rounded-3xl bg-slate-900/80 border border-slate-800/80 p-5 sm:p-6 space-y-4"
+				>
+					<h3 class="text-lg font-semibold text-slate-100">
+						6.1 Use the main window’s DispatcherQueue to hop to UI
+					</h3>
+
+					<p class="text-sm text-slate-300">
+						One safe pattern is to:
+					</p>
+					<ul
+						class="list-disc list-inside text-sm text-slate-300 space-y-1"
+					>
+						<li>
+							Keep all UI-facing work in
+							<code class="code-block">App</code> / window code.
+						</li>
+						<li>
+							From
+							<code class="code-block">Program.OnActivated</code>,
+							enqueue a call onto the main window’s dispatcher.
+						</li>
+					</ul>
+
+					<div
+						class="code-block rounded-2xl bg-slate-950/70 border border-slate-800 px-4 py-4 overflow-x-auto"
+					>
+						<pre><code class="language-csharp">// Program.cs
+private static void OnActivated(object sender, AppActivationArguments args)
+{
+    if (Application.Current is not App app || App.MainWindow is null)
+        return;
+
+    // Jump to the UI thread owned by the main window.
+    App.MainWindow.DispatcherQueue.TryEnqueue(() =&gt;
+    {
+        app.HandleActivation(args);
+    });
+}</code></pre>
+					</div>
+
+					<p class="text-xs text-slate-400">
+						This pattern meshes with the DispatcherQueue-based
+						synchronization context recommended in the
+						single-instance tutorial while keeping UI work inside
+						the main window’s thread.
+						:contentReference[oaicite:13]{index=13}
+					</p>
+				</div>
+			</section>
+
+			<!-- Section 7: Background tasks & advanced -->
+			<section id="background-tasks" class="mb-12 lg:mb-16 space-y-5">
+				<h2
+					class="text-2xl font-semibold text-slate-50 flex items-center gap-2"
+				>
+					<span
+						class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-sky-500/90 text-xs font-bold text-slate-950"
+						>7</span
+					>
+					Background tasks &amp; advanced scenarios (optional)
+				</h2>
+
+				<p class="text-sm sm:text-base text-slate-300">
+					Background tasks are orthogonal to single-instancing, but
+					the same activation pipeline concept applies: the Windows
+					App SDK exposes activation kinds and payloads that you can
+					inspect in one central place.
+					:contentReference[oaicite:14]{index=14}
+				</p>
+
+				<div
+					class="rounded-3xl bg-slate-900/80 border border-slate-800/80 p-5 sm:p-6 space-y-4"
+				>
+					<h3 class="text-lg font-semibold text-slate-100">
+						7.1 Where background tasks fit
+					</h3>
+					<ul
+						class="list-disc list-inside text-sm text-slate-300 space-y-1"
+					>
+						<li>
+							Use background tasks for work that should run when
+							your full UI isn’t needed: timers, push
+							notifications, maintenance, etc.
+						</li>
+						<li>
+							Register them in the manifest or dynamically
+							(depending on trigger type).
+						</li>
+						<li>
+							Within the background task entry point, you can use
+							similar activation reasoning to decide what to do.
+						</li>
+					</ul>
+					<p class="text-sm text-slate-300">
+						The Windows App SDK background tasks docs and the app
+						lifecycle samples show how to wire this up in detail;
+						the instancing and rich activation APIs you’re already
+						using plug directly into that model.
+						:contentReference[oaicite:15]{index=15}
+					</p>
+				</div>
+
+				<div
+					class="rounded-3xl bg-slate-900/80 border border-slate-800/80 p-5 sm:p-6 space-y-3"
+				>
+					<h3 class="text-sm font-semibold text-slate-200 uppercase">
+						7.2 Unpackaged apps &amp; custom instancing
+					</h3>
+					<p class="text-sm text-slate-300">
+						For unpackaged desktop apps that adopt the Windows App
+						SDK, you can:
+					</p>
+					<ul
+						class="list-disc list-inside text-sm text-slate-300 space-y-1"
+					>
+						<li>
+							Use
+							<code class="code-block"
+								>ActivationRegistrationManager</code
+							>
+							to register for protocol/file/startup activation.
+							:contentReference[oaicite:16]{index=16}
+						</li>
+						<li>
+							Combine
+							<code class="code-block">AppInstance</code> with a
+							custom IPC mechanism (for example, named pipes) to
+							forward arbitrary launch arguments, a pattern
+							explored in community blog posts.
+							:contentReference[oaicite:17]{index=17}
+						</li>
+					</ul>
+					<p class="text-xs text-slate-400">
+						The core idea is still the same: there is exactly one
+						“main” instance that owns UI and activation processing,
+						with other processes doing minimal work and then
+						redirecting/forwarding data.
+					</p>
+				</div>
+			</section>
+
+			<!-- Section 8: Checklist -->
+			<section id="full-flow-checklist" class="mb-12 lg:mb-20 space-y-5">
+				<h2
+					class="text-2xl font-semibold text-slate-50 flex items-center gap-2"
+				>
+					<span
+						class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-sky-500/90 text-xs font-bold text-slate-950"
+						>8</span
+					>
+					End-to-end checklist
+				</h2>
+
+				<div
+					class="rounded-3xl bg-slate-900/80 border border-slate-800/80 p-5 sm:p-6"
+				>
+					<ol
+						class="list-decimal list-inside text-sm sm:text-base text-slate-300 space-y-1.5"
+					>
+						<li>
+							Create a
+							<strong
+								>Blank App, Packaged (WinUI 3 in
+								Desktop)</strong
+							>
+							project with Windows App SDK 1.8.
+							:contentReference[oaicite:18]{index=18}
+						</li>
+						<li>
+							Add
+							<code class="code-block"
+								>DISABLE_XAML_GENERATED_MAIN</code
+							>
+							to the project file.
+						</li>
+						<li>
+							Create <strong>Program.cs</strong>:
+							<ul class="list-disc list-inside ml-5 space-y-1">
+								<li>Initialize COM wrappers.</li>
+								<li>
+									Call
+									<code class="code-block"
+										>AppInstance.GetCurrent().GetActivatedEventArgs()</code
+									>.
+								</li>
+								<li>
+									Use
+									<code class="code-block"
+										>AppInstance.FindOrRegisterForKey</code
+									>
+									with a unique key.
+								</li>
+								<li>
+									Redirect when
+									<code class="code-block">IsCurrent</code> is
+									<code>false</code> via
+									<code class="code-block"
+										>RedirectActivationToAsync</code
+									>.
+								</li>
+								<li>
+									Attach
+									<code class="code-block"
+										>AppInstance.Activated</code
+									>
+									for the primary instance.
+								</li>
+							</ul>
+						</li>
+						<li>
+							In <strong>App.xaml.cs</strong>:
+							<ul class="list-disc list-inside ml-5 space-y-1">
+								<li>
+									Store the main window in a static property.
+								</li>
+								<li>
+									Call
+									<code class="code-block"
+										>HandleActivation</code
+									>
+									from
+									<code class="code-block">OnLaunched</code>.
+								</li>
+								<li>
+									Switch on
+									<code class="code-block"
+										>ExtendedActivationKind</code
+									>
+									and handle launch + protocol.
+								</li>
+							</ul>
+						</li>
+						<li>
+							From <strong>Program.OnActivated</strong>, marshal
+							to the main window’s DispatcherQueue and call
+							<code class="code-block">App.HandleActivation</code
+							>.
+						</li>
+						<li>
+							Edit <strong>Package.appxmanifest</strong>:
+							<ul class="list-disc list-inside ml-5 space-y-1">
+								<li>
+									Add a
+									<code class="code-block"
+										>windows.protocol</code
+									>
+									extension with your scheme name (for
+									example,
+									<code class="code-block"
+										>singleinstance</code
+									>).
+								</li>
+							</ul>
+						</li>
+						<li>
+							Deploy the app and test:
+							<ul class="list-disc list-inside ml-5 space-y-1">
+								<li>Normal launch from Start menu.</li>
+								<li>
+									Multiple launches (should always focus the
+									same instance).
+								</li>
+								<li>
+									Launching URIs both when the app is closed
+									and when it’s already running.
+								</li>
+							</ul>
+						</li>
+						<li>
+							Optionally, layer in background tasks or additional
+							activation kinds (file, startup, etc.) using the
+							same centralized handler and instance model.
+						</li>
+					</ol>
+				</div>
+
+				<p class="mt-6 text-xs sm:text-sm text-slate-400">
+					This document integrates the 2022 DrumPad single-instance
+					sample, the up-to-date Windows App SDK 1.8 lifecycle docs
+					(instancing, rich activation, background tasks), and recent
+					community guidance on single-instance apps and argument
+					forwarding. :contentReference[oaicite:19]{index=19}
+				</p>
+			</section>
+		</div>
+	</body>
+</html>

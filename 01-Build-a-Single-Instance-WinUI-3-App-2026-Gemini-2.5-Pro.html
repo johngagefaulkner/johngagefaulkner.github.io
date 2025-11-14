@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>
+			Master Guide: WinUI 3 Single-Instance & Protocol Activation
+		</title>
+		<script src="https://cdn.tailwindcss.com"></script>
+		<style>
+			/* 2. Basic Fluent-like body styles using Tailwind's theme */
+			body {
+				@apply bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100;
+			}
+			/* 3. Style for code blocks */
+			pre {
+				@apply bg-gray-100 dark:bg-gray-800 p-4 rounded-lg overflow-x-auto text-sm;
+			}
+			code {
+				@apply font-mono;
+			}
+			/* 4. Fluent-like headings */
+			h1,
+			h2,
+			h3 {
+				@apply font-semibold;
+			}
+			h1 {
+				@apply text-4xl mb-4 text-blue-600 dark:text-blue-400;
+			}
+			h2 {
+				@apply text-2xl mt-8 mb-3 pb-2 border-b border-gray-300 dark:border-gray-700;
+			}
+			h3 {
+				@apply text-xl mt-6 mb-2 text-blue-500 dark:text-blue-300;
+			}
+			p {
+				@apply mb-4 leading-relaxed;
+			}
+			ul {
+				@apply list-disc list-inside mb-4 pl-4;
+			}
+			li {
+				@apply mb-2;
+			}
+			.note {
+				@apply bg-yellow-50 dark:bg-gray-800 border-l-4 border-yellow-400 dark:border-yellow-500 p-4 rounded-r-lg my-4;
+			}
+			.container {
+				@apply max-w-4xl;
+			}
+		</style>
+	</head>
+	<body class="antialiased">
+		<div
+			class="container mx-auto p-8 prose prose-lg dark:prose-invert max-w-none"
+		>
+			<h1>Master Guide: WinUI 3 Single-Instance & Protocol Activation</h1>
+			<p class="text-gray-600 dark:text-gray-400">
+				A comprehensive, step-by-step walkthrough for creating a
+				single-instanced WinUI 3 desktop app with redirection and
+				protocol argument handling using the Windows App SDK (late
+				2025).
+			</p>
+
+			<h2>Introduction: The Modern Approach</h2>
+			<p>
+				The original 2022 blog posts have been superseded by a more
+				robust model using the
+				<strong>Microsoft.Windows.AppLifecycle.AppInstance</strong>
+				class. This guide uses that modern API. The entire process
+				hinges on creating a custom entry point for your application
+				(`Program.cs`) where you can check for other running instances
+				*before* any windows are created.
+			</p>
+			<p>The flow is:</p>
+			<ul>
+				<li>
+					A user launches your app (either normally or via protocol
+					URI).
+				</li>
+				<li>The app's custom `Main` method runs.</li>
+				<li>
+					It tries to register a unique key. If it fails, another
+					instance (the "main instance") already exists.
+				</li>
+				<li>
+					The *new* instance redirects its activation arguments (e.g.,
+					the protocol URI) to the main instance and immediately
+					exits.
+				</li>
+				<li>
+					The *main* instance receives these new arguments via an
+					`Activated` event and processes them, such as by opening a
+					new tab or logging the URI.
+				</li>
+			</ul>
+
+			<h2>Step 1: Disable the Auto-Generated Entry Point</h2>
+			<p>
+				First, you must tell MSBuild not to create the default
+				`Program.cs` file.
+			</p>
+			<ol class="list-decimal list-inside space-y-2">
+				<li>
+					Right-click your WinUI 3 project in Visual Studio and select
+					<strong>Edit Project File</strong>.
+				</li>
+				<li>
+					Inside the first <strong>&lt;PropertyGroup&gt;</strong>, add
+					this line:
+				</li>
+			</ol>
+			<pre><code class="language-xml">&lt;!-- This disables the auto-generated Program.cs -->
+&lt;DefineConstants&gt;$(DefineConstants);DISABLE_XAML_GENERATED_MAIN&lt;/DefineConstants&gt;
+</code></pre>
+
+			<h2>Step 2: Create a Custom Program.cs</h2>
+			<p>Now, you must create your own entry point.</p>
+			<ol class="list-decimal list-inside space-y-2">
+				<li>
+					Right-click your project and select
+					<strong>Add &gt; New Item</strong>.
+				</li>
+				<li>
+					Choose <strong>Class</strong> and name it
+					<strong>Program.cs</strong>.
+				</li>
+				<li>
+					Replace the contents of `Program.cs` with the code below.
+					This is the core logic that will handle instancing and
+					redirection.
+				</li>
+			</ol>
+			<pre><code class="language-csharp">using Microsoft.UI.Xaml;
+using Microsoft.Windows.AppLifecycle;
+using System;
+using System.Linq;
+using System.Threading.Tasks;
+
+namespace YourAppNamespace; // &lt;-- CHANGE THIS to your app's namespace
+
+public static class Program
+{
+    // Define a unique key for your app instance
+    public const string AppInstanceKey = "my-unique-app-key-12345";
+
+    [STAThread] // Must be single-threaded
+    static async Task Main(string[] args)
+    {
+        // Initialize WinRT (required)
+        WinRT.ComWrappersSupport.InitializeComWrappers();
+
+        // Check if we are being activated by a protocol
+        AppActivationArguments activationArgs = AppInstance.GetCurrent().GetActivatedEventArgs();
+
+        // 1. Find or register the main instance
+        AppInstance mainInstance = AppInstance.FindOrRegisterForKey(AppInstanceKey);
+
+        // 2. If this is the main instance...
+        if (mainInstance.IsCurrent)
+        {
+            // ...register to handle future activations (from other instances)
+            mainInstance.Activated += OnAppActivated;
+
+            // Run the app's OnLaunched code
+            // We pass the args here, but OnLaunched will also get them.
+            // This is just to ensure the first launch works correctly.
+            StartApp(activationArgs);
+        }
+        // 3. If this is NOT the main instance...
+        else
+        {
+            // ...redirect the activation to the main instance and exit.
+            // This sends our activationArgs (e.g., the protocol URI) to the
+            // 'OnAppActivated' handler in the main instance.
+            await mainInstance.RedirectActivationToAsync(activationArgs);
+            Environment.Exit(0);
+        }
+    }
+
+    private static void StartApp(AppActivationArguments args)
+    {
+        // This is the standard WinUI 3 startup code
+        Application.Start((p) =>
+        {
+            var context = new DispatcherQueueSynchronizationContext(
+                Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread());
+            SynchronizationContext.SetSynchronizationContext(context);
+
+            // This is your standard App.xaml.cs class
+            new App();
+        });
+    }
+
+    // This handler runs in the *main instance* when a *new instance* redirects to it
+    private static void OnAppActivated(object sender, AppActivationArguments args)
+    {
+        // This event is NOT on the UI thread.
+        // We must use the DispatcherQueue to safely update the UI.
+
+        if (App.MainWindow != null) // App.MainWindow must be set in App.xaml.cs
+        {
+            App.MainWindow.DispatcherQueue.TryEnqueue(() =>
+            {
+                // Call a method on your App or MainWindow to handle the args
+                (Application.Current as App)?.HandleActivation(args);
+            });
+        }
+    }
+}
+</code></pre>
+
+			<h2>Step 3: Update App.xaml.cs to Store the Window</h2>
+			<p>
+				The `Program.cs` code needs a static way to access your
+				`MainWindow` to get its `DispatcherQueue`.
+			</p>
+			<ol class="list-decimal list-inside space-y-2">
+				<li>Open your <strong>App.xaml.cs</strong> file.</li>
+				<li>Add a static `MainWindow` property.</li>
+				<li>In `OnLaunched`, *set* this static property.</li>
+				<li>
+					Create the `HandleActivation` method that `Program.cs` will
+					call.
+				</li>
+			</ol>
+			<pre><code class="language-csharp">using Microsoft.UI.Xaml;
+using Microsoft.Windows.AppLifecycle;
+using System;
+using Windows.ApplicationModel.Activation; // For ProtocolActivatedEventArgs
+
+namespace YourAppNamespace; // &lt;-- CHANGE THIS
+
+public partial class App : Application
+{
+    // 1. Static property to hold the main window
+    public static WindowEx MainWindow { get; private set; } // Use WindowEx or your MainWindow type
+
+    private Window m_window;
+
+    public App()
+    {
+        this.InitializeComponent();
+    }
+
+    protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
+    {
+        m_window = new MainWindow(); // Or your main window class
+
+        // 2. Set the static property
+        MainWindow = m_window as WindowEx; // Cast to your window type if needed
+
+        m_window.Activate();
+
+        // 3. Handle the *first* activation (optional, but good practice)
+        // This handles the case where the app is launched *for the first time*
+        // via a protocol, before the `Activated` event is registered.
+        var activationArgs = AppInstance.GetCurrent().GetActivatedEventArgs();
+        HandleActivation(activationArgs);
+    }
+
+    // 4. This is the method our Program.cs will call!
+    public void HandleActivation(AppActivationArguments args)
+    {
+        // Bring the window to the foreground
+        if (MainWindow != null)
+        {
+            MainWindow.Activate();
+            // You can also use other methods to bring it to focus, e.g.:
+            // WindowEx.BringToFront();
+        }
+
+        // Check what kind of activation it is
+        if (args.Kind == ExtendedActivationKind.Protocol)
+        {
+            // This is the magic!
+            // Cast the Data to the correct *Windows* (not Microsoft.UI) type
+            var protocolArgs = args.Data as Windows.ApplicationModel.Activation.IProtocolActivatedEventArgs;
+
+            if (protocolArgs != null)
+            {
+                // We now have the URI!
+                Uri uri = protocolArgs.Uri;
+                string rawUri = uri.AbsoluteUri;
+
+                // TODO: Process the URI!
+                // e.g., pass this to a ViewModel or log it
+                System.Diagnostics.Debug.WriteLine($"[ACTIVATION] Protocol URI received: {rawUri}");
+
+                // Example: Navigate your app or show the args
+                if (MainWindow.Content is MainPage mainPage)
+                {
+                    mainPage.ShowActivationMessage($"Activated with URI: {rawUri}");
+                }
+            }
+        }
+        else if (args.Kind == ExtendedActivationKind.Launch)
+        {
+            // Standard launch
+            System.Diagnostics.Debug.WriteLine("[ACTIVATION] Standard launch.");
+        }
+        // You can add more handlers here for File activation, etc.
+    }
+}
+
+// NOTE: You'll need a simple WindowEx class or similar if you want BringToFront
+// You can get this from the Windows App SDK samples or community toolkits.
+// For simplicity, this guide just uses m_window.Activate().
+</code></pre>
+			<div class="note">
+				<strong>Bonus Points: The DispatcherQueue</strong><br />
+				Notice the `OnAppActivated` in `Program.cs`. This event fires on
+				a background thread. Trying to access `MainWindow` or update any
+				UI from there will crash your app.
+				<br /><br />
+				The solution is
+				`App.MainWindow.DispatcherQueue.TryEnqueue(...)`. This is the
+				"bonus point" scenario you mentioned. It safely marshals the
+				call (and the `args`) back to the main UI thread, where it's
+				safe to call `MainWindow.Activate()` and pass the URI to your
+				UI.
+			</div>
+
+			<h2>Step 4: Register the Protocol URI Scheme</h2>
+			<p>
+				Finally, you must tell Windows that your app can handle a
+				specific URI scheme (e.g., `my-app-scheme://`).
+			</p>
+			<ol class="list-decimal list-inside space-y-2">
+				<li>
+					This is easiest if your app is
+					<strong>Packaged</strong> (e.g., in an MSIX).
+				</li>
+				<li>Open your <strong>Package.appxmanifest</strong> file.</li>
+				<li>Go to the <strong>Declarations</strong> tab.</li>
+				<li>
+					From the "Available Declarations" dropdown, select
+					<strong>Protocol</strong> and click <strong>Add</strong>.
+				</li>
+				<li>
+					In the "Properties" pane, set the <strong>Name</strong>.
+					This is your scheme. For example: `my-app-scheme`.
+				</li>
+			</ol>
+			<p>This adds the following to your manifest XML:</p>
+			<pre><code class="language-xml">&lt;Applications&gt;
+  &lt;Application ...&gt;
+    &lt;Extensions&gt;
+      &lt;uap:Extension Category="windows.protocol"&gt;
+        &lt;uap:Protocol Name="my-app-scheme" /&gt;
+      &lt;uap:Extension&gt;
+    &lt;/Extensions&gt;
+    ...
+  &lt;/Application&gt;
+&lt;/Applications&gt;
+</code></pre>
+			<div class="note">
+				<strong>For Unpackaged Apps:</strong> If your app is unpackaged,
+				you must write this information directly to the Windows Registry
+				during your app's installation process. This is more complex and
+				typically handled by an installer like Inno Setup or WiX. The
+				registry keys are created under
+				`HKEY_CLASSES_ROOT\my-app-scheme`.
+			</div>
+
+			<h2>Conclusion & Testing</h2>
+			<p>You are now done. To test:</p>
+			<ol class="list-decimal list-inside space-y-2">
+				<li>
+					Run your app from Visual Studio. This is now the "main
+					instance."
+				</li>
+				<li>Press <strong>Win + R</strong> to open the Run dialog.</li>
+				<li>
+					Type your protocol URI, including some test arguments:
+					<strong>`my-app-scheme://open/document?id=123`</strong>
+				</li>
+				<li>Press Enter.</li>
+			</ol>
+			<p>
+				You should see a *new process* for your app briefly appear in
+				Task Manager, then immediately disappear (this is the
+				redirection). Your *original* app window will then pop to the
+				foreground, and your Debug Output window in Visual Studio should
+				log the message:
+			</p>
+			<pre><code class="language-text">[ACTIVATION] Protocol URI received: my-app-scheme://open/document?id=123
+</code></pre>
+			<p>
+				You have successfully created a single-instance WinUI 3 app that
+				can handle redirected URI activations with arguments.
+			</p>
+		</div>
+	</body>
+</html>
